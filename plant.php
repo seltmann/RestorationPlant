@@ -1,6 +1,7 @@
 <?php
 #php red_listed_plants.php
-#USDAendangered_usa_plants.txt row[1] = genus; row[2] = species
+#USDAendangered_usa_plants.txt row[1] = genus; row[2] = species. Written in php to interact with the Arthropod Easy Capture database. Compares a list of host taxa to find insect associates, counts number of specimen records, and creates a separate geo file of known coordintes. Does both counts for exact matches and grouping based on genera or common name.
+
 require_once("MDB2.php");
 
 #connect to database=======
@@ -68,8 +69,41 @@ $outputtwo = '';
 }
 
 function geoCoordinates($insect_genus,$insect_species){
-	#TODO write a separate geo file
-}
+	#TODO write a separate geo file\
+		global $DB;
+		
+		#set an empty array
+		$coordinates = '';
+		$coordinatesthree = '';
+		
+		#create a new file to write geocoordinates into
+		$flp = fopen('coordinateExactMatchInsectAssociates.tsv', 'w');
+	
+		$resultsGetName = $DB->query("Select distinct L1.DLat,L1.DLong FROM Specimen S1 left join MNL T1 ON S1.Genus = T1.MNLUID left join MNL T2  ON S1.Species = T2.MNLUID left join MNL T3 ON S1.Tribe=T3.MNLUID left join MNL T4 on S1.Subfamily=T4.MNLUID left join MNL T5 on T4.ParentID=T5.MNLUID left join Locality L1 on S1.Locality=L1.LocalityUID left join Flora_MNL F1 ON S1.HostG=F1.HostMNLUID left join Flora_MNL F2 ON S1.HostSp=F2.HostMNLUID left join Flora_MNL F3 ON S1.HostSSp=F3.HostMNLUID left join Flora_MNL F4 ON S1.HostF=F4.HostMNLUID left join SubDiv SD on L1.SubDivUID=SD.SubDivUID left join StateProv SP on SD.StateProvUID=SP.StateProvUID left join colevent CE on S1.ColEventUID=CE.ColEventUID left join Collector C1 on CE.Collector=C1.CollectorUID left join Country CN on SP.CountryUID=CN.UID where T2.TaxName not like '%#%' and T2.TaxName not like '%sp.%'and T2.TaxName != 'sp' and T2.TaxName not like '%\_%' and T2.TaxName not like '%spp.%' and T2.TaxName != 'unknown' and DLat != '0.00000' and L1.LocalityStr !='unknown' and T1.TaxName='$insect_genus' and T2.TaxName='$insect_species'");
+		if (PEAR::isError($resultsGetName)) {
+			error_log("DB Error - Invalid query for geoCoordinates");
+			exit;
+		}
+		while ($row =& $resultsGetName->fetchRow()){
+			$DLat = trim($row[0]);
+			$DLong = trim($row[1]);
+			#print $insect_genus . $insect_species . $DLat . $DLong;
+			$coordinates = array($insect_genus,$insect_species,$DLat,$DLong);
+			#$coordinates .= $insect_genus . "\t" .  $insect_species . "\t" .  $DLat . "\t" .  $DLong . "\n";
+		}
+		print_r($coordinates);
+		#TODO return unique array
+		$coordinatestwo = array_unique($coordinates);
+		foreach ($coordinatestwo as $value) {
+			$coordinatesthree .= $value[0] . "\t" .  $value[1] . "\t" .  $value[2] . "\t" .  $value[3] . "\n";
+		}
+		
+		$coordinateHeader = "insectGenus" . "\t" .  "insectSpecies" . "\t" .  "DLong" . "\t" . "DLat" . "\n" . $coordinatesthree;
+
+		fwrite($flp, $coordinateHeader);
+
+	}
+
 
 function specimenCount($insect_genus,$insect_species,$plant_genus,$plant_species,$common_name,$typeLookup){
 			global $DB;
@@ -83,7 +117,7 @@ function specimenCount($insect_genus,$insect_species,$plant_genus,$plant_species
 			
 			$resultsCount = $DB->query("Select count(distinct S1.SpecimenUID) from Specimen S1 left join MNL T1  ON S1.Genus = T1.MNLUID left join MNL T2  ON S1.Species = T2.MNLUID left join MNL T3 ON S1.Tribe=T3.MNLUID left join MNL T4 on S1.Subfamily=T4.MNLUID left join MNL T5 on T4.ParentID=T5.MNLUID left join Locality L1 on S1.Locality=L1.LocalityUID left join Flora_MNL F1 ON S1.HostG=F1.HostMNLUID left join Flora_MNL F2 ON S1.HostSp=F2.HostMNLUID left join Flora_MNL F3 ON S1.HostSSp=F3.HostMNLUID left join Flora_MNL F4 ON S1.HostF=F4.HostMNLUID left join SubDiv SD on L1.SubDivUID=SD.SubDivUID left join StateProv SP on SD.StateProvUID=SP.StateProvUID left join colevent CE on S1.ColEventUID=CE.ColEventUID left join Collector C1 on CE.Collector=C1.CollectorUID left join Country CN on SP.CountryUID=CN.UID left join HostCommonName HC on S1.HostCName=HC.CommonUID where $hostSQL");
 				if (PEAR::isError($resultsCount)) {
-					error_log("DB Error - Invalid query for collecting_counts");
+					error_log("DB Error - Invalid query for specimenCount");
 					exit;
 				}
 				while ($row =& $resultsCount->fetchRow()){
@@ -101,6 +135,7 @@ function plant_match($plant_genus,$plant_species){
 		}
 		return $resultsGetName;
 	}
+	
 	
 	function plant_fuzzyMatch($plant_genus){
 			global $DB;
